@@ -1,20 +1,21 @@
-using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class PlayerSphere : MonoBehaviour
 {
     [SerializeField] private PlayerInput _playerInput;
     [SerializeField] private float _speedReduction;
     [SerializeField] private SphereBullet _bullet;
+    [SerializeField] private PlayerJumpToFinish _playerJumpToFinish;
+    [SerializeField] private GameLoseCanvas _gameLoseCanvas;
 
-    private IEnumerator _reductionCoroutine;
+    public event UnityAction<float> ChangePlayerSphere;
+
     private Vector3 _targetScale;
-    private PlayerSphere _playerSphere;
     private Vector3 _originScale;
 
     private void Awake()
     {
-        _playerSphere = GetComponent<PlayerSphere>();
         _originScale = transform.localScale;
     }
 
@@ -23,6 +24,8 @@ public class PlayerSphere : MonoBehaviour
         _playerInput.OnMouseDoun += OnPointerDown;
 
         _bullet.ChangedBulletSphere += OnChangedBulletScale;
+
+        _bullet.ObstaclesDestroyed += OnObstaclesDestroyed;
 
         _playerInput.OnMouseUp += OnPointerUp;
     }
@@ -33,60 +36,51 @@ public class PlayerSphere : MonoBehaviour
 
         _bullet.ChangedBulletSphere -= OnChangedBulletScale;
 
+        _bullet.ObstaclesDestroyed += OnObstaclesDestroyed;
+
         _playerInput.OnMouseUp -= OnPointerUp;
     }
 
     private void OnPointerDown()
     {
         _targetScale = Vector3.zero;
-        //ReductionSphere();
     }
     
     private void OnPointerUp()
     {
         _originScale = transform.localScale;
-        //StopRediction();
-        //ForbidReduction();
     }
 
     private void OnChangedBulletScale(float scaleValue)
     {
         transform.localScale = Vector3.Lerp(_originScale, Vector3.zero, scaleValue);
-    }
+        ChangePlayerSphere?.Invoke(transform.localScale.x);
 
-    private void ReductionSphere()
-    {
-        Reduction();
-    }
-
-    private void StopRediction()
-    {
-        _targetScale = transform.localScale;
-        StopCoroutine(_reductionCoroutine);
-    }
-
-    private void Reduction()
-    {
-        _reductionCoroutine = ReductionCoroutine();
-        StartCoroutine(_reductionCoroutine);
-    }
-
-    private void ForbidReduction()
-    {
-        _playerSphere.enabled = false;
-    }
-
-
-    private IEnumerator ReductionCoroutine()
-    {
-        Vector3 originScale = transform.localScale;
-        float lerpValue = 0;
-
-        while (transform.localScale != _targetScale)
+        if (transform.localScale.x < 0.1f)
         {
-            transform.localScale = Vector3.Lerp(originScale, Vector3.zero, lerpValue);
-            lerpValue += _speedReduction * Time.deltaTime;
-            yield return null;
+            _gameLoseCanvas.gameObject.SetActive(true);
+            Time.timeScale = 0;
         }
+    }
+
+    private void OnObstaclesDestroyed()
+    {
+        Invoke("CheckRoad", 0.5f);
+    }
+
+    private void CheckRoad()
+    {
+        RaycastHit[] hitInfo = Physics.SphereCastAll(transform.position, transform.localScale.x, transform.forward);
+
+        foreach (var item in hitInfo)
+        {
+            if (item.transform.TryGetComponent(out Obstacle obstacle))
+            {
+                return;
+            }
+        }
+
+        print("Road Clear!");
+        _playerJumpToFinish.enabled = true;
     }
 }
